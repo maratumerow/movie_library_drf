@@ -1,6 +1,7 @@
+from django.conf import settings
 from django.db import models
 
-from django.utils import timezone
+from mptt.models import MPTTModel, TreeForeignKey
 
 
 class Movie(models.Model):
@@ -9,9 +10,7 @@ class Movie(models.Model):
     title = models.CharField('Название', max_length=128)
     description = models.TextField('Описание')
     date_add = models.DateTimeField('Дата добавления', auto_now_add=True)
-    date_update = models.DateTimeField(
-        'Дата обновления', auto_now=True
-    )
+    date_update = models.DateTimeField('Дата обновления', auto_now=True)
     poster = models.ImageField('Постер', upload_to='movie/poster/', blank=True)
     director = models.ManyToManyField('Director', verbose_name='Режисер')
     actor = models.ManyToManyField('Actor', verbose_name='Актер')
@@ -24,13 +23,11 @@ class Movie(models.Model):
     year = models.PositiveIntegerField('Год')
     move_time = models.PositiveIntegerField('Длительность', blank=True)
     translation = models.ManyToManyField('Translation', verbose_name='Перевод')
-    movie_shots = models.ManyToManyField(
-        'MovieShots', verbose_name='Кадр', blank=True
-    )
     file_movie = models.FileField('Видео файл', upload_to='movie/movie_file/')
+    trailer = models.FileField('Трейлер', upload_to='movie/trailer/')
 
     def __str__(self):
-        return f'{self.title}'
+        return f'{self.title} {self.year}'
 
     class Meta:
         verbose_name = 'Фильм'
@@ -38,8 +35,11 @@ class Movie(models.Model):
 
 
 class MovieShots(models.Model):
-    """Кадры из фильма"""
+    """Кадр из фильма"""
 
+    movie = models.ForeignKey(
+        'Movie', on_delete=models.CASCADE, related_name='movie_shots'
+    )
     title = models.CharField('Заголовок', max_length=128)
     image = models.ImageField(
         'Кадр к фильму',
@@ -54,6 +54,15 @@ class MovieShots(models.Model):
     class Meta:
         verbose_name = 'Кадр'
         verbose_name_plural = 'Кадры'
+
+
+class MovieLike(models.Model):
+    """Лайки к фильму"""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
+                             on_delete=models.CASCADE)
+    movie = models.ForeignKey(
+        'Movie', related_name='likes', on_delete=models.CASCADE)
 
 
 class Director(models.Model):
@@ -173,3 +182,31 @@ class Translation(models.Model):
     class Meta:
         verbose_name = 'Перевод, озвучка'
         verbose_name_plural = 'Переводы, озвучки'
+
+
+class Comment(MPTTModel):
+    """Модель коментариев к фильму"""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name='Пользователь'
+    )
+    movie = models.ForeignKey(
+        'Movie', related_name='comment', on_delete=models.CASCADE, verbose_name='Фильм'
+    )
+    text = models.TextField('Текст комментария')
+    date_add = models.DateTimeField('Дата добавления', auto_now_add=True)
+    parent = TreeForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='children',
+        verbose_name='Ответ на комментарий'
+    )
+
+    def __str__(self):
+        return f'{self.user} - {self.movie} - {self.text}'
+
+    class Meta:
+        verbose_name = 'Комментарий'
+        verbose_name_plural = 'Комментарии'
